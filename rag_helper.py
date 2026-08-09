@@ -3,7 +3,7 @@ from ingest import load_faq_data, build_index
 documents = load_faq_data()
 index = build_index(documents)
 
-INSTRUCTION = '''
+INSTRUCTIONS = '''
 Your task is to answer questions from the course participants
 based on the provided context.
 
@@ -22,56 +22,68 @@ Context:
 
 class RAG:
 
-    def __init__(self, index):
+    def __init__(
+        self, 
+        index, 
+        llm_client,
+        instructions=INSTRUCTIONS,
+        prompt_template=USER_PROMPT_TEMPLATE,
+        course='llm-zoomcamp',
+        model='gpt-5.4-mini'
+    ):
         self.index = index
+        self.llm_client = llm_client
+        self.instructions = instructions
+        self.course = course
+        self.prompt_template = prompt_template
+        self.model = model
         
 
-def search(self, question, course='llm-zoomcamp'):
-    boost_dict = {'question':2.0, 'answer':1.0, 'section':0.5}
-    filter_dict = {'course':course}
+    def search(self, query, num_results=5):
+        boost_dict = {'question':3.0, 'answer':1.0, 'section':0.5}
+        filter_dict = {'course':self.course}
 
-    return self.index.search(
-        question,
-        boost_dict = boost_dict,
-        filter_dict = filter_dict,
-        num_results=5
-    )
-
-def build_context(search_results):
-    lines = []
-
-    for doc in search_results:
-        lines.append(doc['section'])
-        lines.append('Q: ' + doc['question'])
-        lines.append('A: ' + doc['answer'])
-        lines.append('')
-
-    return '\n'.join(lines).strip()
-
-def build_prompt(question, search_results):
-    context = build_context(search_results)
-    prompt = USER_PROMPT_TEMPLATE.format(
-        question=question, 
-        context=context
+        return self.index.search(
+            query,
+            boost_dict = boost_dict,
+            filter_dict = filter_dict,
+            num_results=num_results
         )
-    return prompt.strip()
 
-def llm(instructions, user_prompt, model='gpt-5.4-mini'):
-    message_hisstory = [
-        {'role': 'system', 'content': INSTRUCTION}, # System prompt
-        {'role': 'user', 'content': prompt} # User prompt, changeable 
-    ]
+    def build_context(self, search_results):
+        lines = []
 
-    response = openai_client.responses.create(
-        model='gpt-5.4-mini',
-        input=prompt
-    )
+        for doc in search_results:
+            lines.append(doc['section'])
+            lines.append('Q: ' + doc['question'])
+            lines.append('A: ' + doc['answer'])
+            lines.append('')
 
-    return response.output_text
+        return '\n'.join(lines).strip()
 
-def rag(query, model='gpt-5.4-mini'):
-    search_results = search(query)
-    prompt = build_prompt(query, search_results)
-    answer = llm(INSTRUCTION, prompt, model = model)
+    def build_prompt(self, query, search_results):
+        context = self.build_context(search_results)
+        return self.prompt_template.format(
+            question=query, 
+            context=context
+        )
 
-    return answer
+    def llm(self, prompt):
+        input_messages = [
+            {'role': 'system', 'content': self.instructions}, # System prompt
+            {'role': 'user', 'content': prompt} # User prompt, changeable 
+        ]
+
+        response = self.llm_client.responses.create(
+            model=self.model,
+            input=input_messages
+        )
+
+        return response.output_text
+
+    def rag(self, query):
+        search_results = self.search(query)
+        prompt = self.build_prompt(query, search_results)
+        answer = self.llm(prompt)
+
+        return answer
