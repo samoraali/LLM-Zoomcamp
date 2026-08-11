@@ -23,8 +23,8 @@ Context:
 class RAG:
 
     def __init__(
-        self, 
-        index, 
+        self,
+        index,
         llm_client,
         instructions=INSTRUCTIONS,
         prompt_template=USER_PROMPT_TEMPLATE,
